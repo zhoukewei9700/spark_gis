@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.zhoukewei</groupId>
+    <artifactId>zhoukewei</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <repositories>
+        <repository>
+            <id>nexus-aliyun</id>
+            <name>Nexus aliyun</name>
+            <url>http://maven.aliyun.com/nexus/content/groups/public</url>
+        </repository>
+    </repositories>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <hadoop.version>2.7.3</hadoop.version>
+        <scala.version>2.12</scala.version>
+        <spark.version>3.0.2</spark.version>
+        <logback.version>1.2.3</logback.version>
+        <slf4j.version>1.7.28</slf4j.version>
+        <gt.version>21.1</gt.version>
+        <gdal.version>3.4.3</gdal.version>
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
+
+    </properties>
+
+    <dependencies>
+        <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-core -->
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-core_${scala.version}</artifactId>
+            <version>${spark.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-sql -->
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-sql_${scala.version}</artifactId>
+            <version>${spark.version}</version>
+            <!--            <scope>provided</scope>-->
+        </dependency>
+
+        <!--  =================================================  -->
+        <!--  日志及相关依赖 -->
+        <!--  =================================================  -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+        <!-- 强制使用 logback的绑定 -->
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-core</artifactId>
+            <version>${logback.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>${logback.version}</version>
+        </dependency>
+        <!-- slf4j + logback 配置结束 -->
+
+        <!-- un ssh 配置 -->
+        <!-- https://mvnrepository.com/artifact/com.trilead/trilead-ssh2 -->
+        <dependency>
+            <groupId>com.trilead</groupId>
+            <artifactId>trilead-ssh2</artifactId>
+            <version>1.0.0-build222</version>
+        </dependency>
+        <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.12</version>
+            <!--            <scope>provided</scope>-->
+        </dependency>
+
+        <!-- gdal配置 -->
+        <dependency>
+            <groupId>org.gdal</groupId>
+            <artifactId>gdal</artifactId>
+            <version>${gdal.version}</version>
+            <scope>system</scope>
+            <systemPath>${pom.basedir}/src/main/resources/lib/gdal.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>org.xerial</groupId>
+            <artifactId>sqlite-jdbc</artifactId>
+            <version>3.7.2</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.2.14</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains</groupId>
+            <artifactId>annotations</artifactId>
+            <version>RELEASE</version>
+            <scope>compile</scope>
+        </dependency>
+
+<!--        <dependency>-->
+<!--            <groupId>com.github.jai-imageio</groupId>-->
+<!--            <artifactId>jai-imageio-core</artifactId>-->
+<!--            <version>1.4.0</version>-->
+<!--        </dependency>-->
+    </dependencies>
+    <build>
+        <finalName>zhoukewei</finalName>
+        <resources>
+            <resource>
+                <directory>src/main/resources/lib</directory>
+                <targetPath>BOOT-INF/lib/</targetPath>
+                <includes>
+                    <include>**/*.jar</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <targetPath>resources/</targetPath>
+            </resource>
+        </resources>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.0.0</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+
+                            <mainClass>org.zju.zkw.subimg.SubImage</mainClass>
+                            <!--                            <mainClass>org.dde.zju.zhongyan.Resample</mainClass>-->
+                            <!--                            <mainClass>org.dde.zju.zhongyan.SubImg</mainClass>-->
+                            <!--                            <mainClass>org.dde.zju.kczy.GetSubOverlap</mainClass>-->
+                            <!--                            <mainClass>org.dde.zju.kczy.KCZYYC3</mainClass>-->
+                            <!--                            <mainClass>org.dde.zju.kczy.GetOverlap</mainClass>-->
+                        </manifest>
+                    </archive>
+                    <descriptorRefs>
+                        <descriptorRef>jar-with-dependencies</descriptorRef>
+                    </descriptorRefs>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>make-assembly</id> <!-- this is used for inheritance merges -->
+                        <phase>package</phase> <!-- 指定在打包节点执行jar包合并操作 -->
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
