@@ -1,4 +1,5 @@
 package org.zju.zkw.subimg;
+
 import org.apache.commons.collections.IteratorUtils;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -37,6 +38,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
+
 import static org.zju.zkw.Constant.*;
 
 
@@ -100,13 +102,13 @@ public class SubImageV3 {
         String mbtilesFolder = JSON_PATH;
 
         File fileDir = new File(tifFolder);
-        if(fileDir.isFile()){
+        if (fileDir.isFile()) {
             logger.error("Input should be a directory,exit");
             System.exit(1);
         }
         //define zoom level
         String[] zRangeArr = zRange.split("-");
-        if(zRangeArr.length !=2){
+        if (zRangeArr.length != 2) {
             logger.error("zRange should be like 'z1-z2', z1 & z2 should be integer in 0-15!");
             System.exit(1);
         }
@@ -126,37 +128,37 @@ public class SubImageV3 {
         JavaSparkContext sc = new JavaSparkContext(ss.sparkContext());
 
         //从高到低逐层切片
-        for(int zoomLevel=maxZ;zoomLevel>=minZ;zoomLevel--){
+        for (int zoomLevel = maxZ; zoomLevel >= minZ; zoomLevel--) {
             //创建瓦片信息
             //final int zoomLevelf = zoomLevel;
             double dResolution = zResolution.get(zoomLevel);
             List<Tuple2<String, RasterInfo>> mapSubdivision = RasterProcess.createMapSubdivision(
                     new Extent(-20026376.39, 20026376.39, -20048966.10, 20048966.10),
-                    zoomLevel,256,256,BAND_NUM,PROJECT,pngFolder);
+                    zoomLevel, 256, 256, BAND_NUM, PROJECT, pngFolder);
             //创建一个hash表用来存sub的信息
-            HashMap<String,Extent> subInfo = new HashMap<>();
+            HashMap<String, Extent> subInfo = new HashMap<>();
             Driver memDriver = gdal.GetDriverByName("MEM");
             Driver pngDriver = gdal.GetDriverByName("PNG");
             Dataset memDataset;
             Dataset pngDataset = null;
-            for(Tuple2<String,RasterInfo> sub:mapSubdivision){
-                memDataset = memDriver.Create("",256,256,3,gdalconst.GDT_Byte);
-                pngDataset = pngDriver.CreateCopy(sub._1,memDataset);
-                subInfo.put(sub._1,sub._2().getExtent());
+            for (Tuple2<String, RasterInfo> sub : mapSubdivision) {
+                memDataset = memDriver.Create("", 256, 256, 3, gdalconst.GDT_Byte);
+                pngDataset = pngDriver.CreateCopy(sub._1, memDataset);
+                subInfo.put(sub._1, sub._2().getExtent());
             }
             memDriver.delete();
             pngDataset.delete();
 
             //读取所有tif
             List<String> allTif = new ArrayList<>();
-            for(String fileSubDir: Objects.requireNonNull(fileDir.list())) {
-                String[] tifList = new File(tifFolder +"/"+ fileSubDir).list();
+            for (String fileSubDir : Objects.requireNonNull(fileDir.list())) {
+                String[] tifList = new File(tifFolder + "/" + fileSubDir).list();
                 //String[] tifList = new File(tifFolder +"\\"+ fileSubDir).list();
                 if (tifList == null) {
                     continue;
                 }
                 List<String> filter = Arrays.stream(Objects.requireNonNull(tifList))
-                        .filter(f -> f.endsWith(".tif")).map(f -> tifFolder +"/"+ fileSubDir + "/"+ f).collect(Collectors.toList());
+                        .filter(f -> f.endsWith(".tif")).map(f -> tifFolder + "/" + fileSubDir + "/" + f).collect(Collectors.toList());
                 //.filter(f -> f.endsWith(".tif")).map(f -> tifFolder +"\\"+ fileSubDir + "\\"+ f).collect(Collectors.toList());
                 allTif.addAll(filter);
             }
@@ -167,31 +169,31 @@ public class SubImageV3 {
             //判断是否重合并填充png
             //Connection finalConn = conn;
             allTifRDD.flatMapToPair(
-                            (PairFlatMapFunction<String,String,String>)tif->{
-                                List<Tuple2<String,String>> overlaps = new ArrayList<>();
+                            (PairFlatMapFunction<String, String, String>) tif -> {
+                                List<Tuple2<String, String>> overlaps = new ArrayList<>();
 
-                                Dataset imgSrc = gdal.Open(tif,gdalconst.GA_ReadOnly);//打开tif
+                                Dataset imgSrc = gdal.Open(tif, gdalconst.GA_ReadOnly);//打开tif
                                 SpatialReference destSR = new SpatialReference(PROJECT);//先做投影变换，将投影转换成web墨卡托
-                                CoordinateTransformation ct = new CoordinateTransformation(imgSrc.GetSpatialRef(),destSR);
+                                CoordinateTransformation ct = new CoordinateTransformation(imgSrc.GetSpatialRef(), destSR);
 
-                                for(Tuple2<String,RasterInfo> sub:mapSubdivision){//和空白的切片分幅判断是否重合
-                                    logger.info("intersect or not: "+tif+ " "+sub._1 );
-                                    if(RasterProcess.getExtent(imgSrc,ct).intersect(sub._2.getExtent())){
-                                        overlaps.add(new Tuple2<>(sub._1,tif));
+                                for (Tuple2<String, RasterInfo> sub : mapSubdivision) {//和空白的切片分幅判断是否重合
+                                    logger.info("intersect or not: " + tif + " " + sub._1);
+                                    if (RasterProcess.getExtent(imgSrc, ct).intersect(sub._2.getExtent())) {
+                                        overlaps.add(new Tuple2<>(sub._1, tif));
                                     }
                                 }
                                 imgSrc.delete();
                                 return overlaps.iterator();
                             }).groupByKey()
-                    .map((Function<Tuple2<String, Iterable<String>>,String>) kv -> {
+                    .map((Function<Tuple2<String, Iterable<String>>, String>) kv -> {
                         List<String> list = IteratorUtils.toList(kv._2.iterator());
-                        //logger.info("start to fillsub: "+kv._1);
+                        logger.info("start to fillsub: "+kv._1);
                         Extent extent = subInfo.get(kv._1);
-                        return fillSub(kv._1,list,extent,dResolution);
+                        return fillSub(kv._1, list, extent, dResolution);
                         //return "1";
                     })
-                    .foreach( sub->{
-                        logger.info("fillsub finished "+sub);
+                    .foreach(sub -> {
+                        logger.info("fillsub finished " + sub);
 
                     });
         }
@@ -201,22 +203,22 @@ public class SubImageV3 {
         ss.close();
 
         //导入mbtiles
-        String command = "mb-uitl --scheme=tms "+pngFolder+" "+mbtilesPath;
-        Runtime runtime = Runtime.getRuntime();
-        Process process = runtime.exec(new String[]{"cmd","-c",command});
-        int res = process.waitFor();
-        if(res!=0){
-            logger.error("insert failed!");
-        }
+//        String command = "mb-uitl --scheme=tms "+pngFolder+" "+mbtilesPath;
+//        Runtime runtime = Runtime.getRuntime();
+//        Process process = runtime.exec(new String[]{"/bin/sh","-c",command});
+//        int res = process.waitFor();
+//        if(res!=0){
+//            logger.error("insert failed!");
+//        }
     }
 
-    private static String fillSub(String sub,List<String> tifs,Extent extent,double dRes) {
+    private static String fillSub(String sub, List<String> tifs, Extent extent, double dRes) {
         double dMapX, dMapY;  //
         int iDestX, iDestY;
         short[] imgArray = new short[1];
         CoordinateTransformation ct = null;
-        logger.info("start to fillsub: "+sub);
-        int xSize=256;
+        logger.info("start to fillsub: " + sub);
+        int xSize = 256;
         int ySize = 256;
         int nBand = 3;
 
@@ -250,7 +252,7 @@ public class SubImageV3 {
                     dMapY = xyTransformed[1];
 
                     // subfill
-                    double[] GT={extent.getMinX(),dRes,0.0,extent.getMaxY(),0.0,-dRes};
+                    double[] GT = {extent.getMinX(), dRes, 0.0, extent.getMaxY(), 0.0, -dRes};
                     int[] ints = RasterProcess.geo2ImageXY(dMapX, dMapY, GT);
                     iDestX = ints[0];
                     iDestY = ints[1];
@@ -261,24 +263,27 @@ public class SubImageV3 {
                             // fill-in
                             dsSrc.ReadRaster(x, y, 1, 1, 1, 1, gdalconst.GDT_UInt16, imgArray, new int[]{iBand});
                             //if(imgArray[0]!=0){System.out.println("the pixel value is "+imgArray[0]+"  written to "+sub);}
-                            if(imgArray[0]>0){
-                                tempImgArray[iBand-1][256*iDestY+iDestX] = imgArray[0];//将所有数值插入临时数组
+                            if (imgArray[0] > 0) {
+                                tempImgArray[iBand - 1][256 * iDestY + iDestX] = imgArray[0];//将所有数值插入临时数组
                             }
                         }
                     }
                 }
             }
+            logger.info("====================Insert into tempArray Finished====================");
             dsSrc.delete();
         }
         Driver memDriver = gdal.GetDriverByName("MEM");
-        Dataset memDataset = memDriver.Create("",xSize,ySize,BAND_NUM,gdalconst.GDT_Byte);
-        for(int i=1;i<=BAND_NUM;i++){
-            byte[] imgArray2 = RasterProcess.compress(tempImgArray[i-1],ySize,xSize,0.02,0.98);
-            memDataset.WriteRaster(0,0,xSize,ySize,xSize,ySize,gdalconst.GDT_Byte,imgArray2,new int[]{i});
+        Dataset memDataset = memDriver.Create("", xSize, ySize, BAND_NUM, gdalconst.GDT_Byte);
+        for (int i = 1; i <= BAND_NUM; i++) {
+            byte[] imgArray2 = RasterProcess.compress(tempImgArray[i - 1], ySize, xSize, 0.02, 0.98);
+            memDataset.WriteRaster(0, 0, xSize, ySize, xSize, ySize, gdalconst.GDT_Byte, imgArray2, new int[]{i});
         }
+        logger.info("====================Write into memDataset Finished====================");
         Driver pngDriver = gdal.GetDriverByName("PNG");
-        Dataset pngDataset = pngDriver.CreateCopy(sub,memDataset);
-        if(pngDataset==null)
+        Dataset pngDataset = pngDriver.CreateCopy(sub, memDataset);
+        logger.info("====================Createcopy Finished====================");
+        if (pngDataset == null)
             return "fillsub failed!";
         else {
             pngDataset.delete();
@@ -294,7 +299,7 @@ public class SubImageV3 {
     private static String removeExtension(String fName) {
 
         int pos = fName.lastIndexOf('.');
-        if(pos > -1)
+        if (pos > -1)
             return fName.substring(0, pos);
         else
             return fName;
