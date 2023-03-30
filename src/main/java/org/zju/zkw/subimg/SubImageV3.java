@@ -245,29 +245,30 @@ public class SubImageV3 {
             double[] subRB_trans = ct2.TransformPoint(subRB[0],subRB[1]);
             int[] subLT_ImageXY = RasterProcess.geo2ImageXY(subLT_trans[0],subLT_trans[1],arrGeoTransform);
             int[] subRB_ImageXY = RasterProcess.geo2ImageXY(subRB_trans[0],subRB_trans[1],arrGeoTransform);
-            int startCol=0;
-            int startRow=0;
-            int endCol = uiCols;
-            int endRow = uiRows;
+
             //判断是否越过原图像边界
-            if(subLT_ImageXY[0]>=0&&subLT_ImageXY[0]<=uiCols){
-                startCol = subLT_ImageXY[0];
-            }
-            if(subRB_ImageXY[1]<=uiCols&&subRB_ImageXY[1]>=0){
-                endCol = subRB_ImageXY[0];
-            }
-            if(subLT_ImageXY[1]>=0&&subLT_ImageXY[1]<=uiRows){
-                startRow = subLT_ImageXY[1];
-            }
-            if(subRB_ImageXY[1]<=uiRows&&subRB_ImageXY[1]>=0){
-                endRow = subRB_ImageXY[1];
-            }
+//            if(subLT_ImageXY[0]>=0&&subLT_ImageXY[0]<=uiCols){
+//                startCol = subLT_ImageXY[0];
+//            }
+//            if(subRB_ImageXY[0]<=uiCols&&subRB_ImageXY[0]>=0){
+//                endCol = subRB_ImageXY[0];
+//            }
+//            if(subLT_ImageXY[1]>=0&&subLT_ImageXY[1]<=uiRows){
+//                startRow = subLT_ImageXY[1];
+//            }
+//            if(subRB_ImageXY[1]<=uiRows&&subRB_ImageXY[1]>=0){
+//                endRow = subRB_ImageXY[1];
+//            }
 
             //resample
 //            for (int y = 0; y<uiRows;y++){
 //                for(int x=0;x<uiCols;x++){
-            for (int y = startRow; y <= endRow; y++) {
-                for (int x = startCol; x <= endCol; x++) {
+            int startRow = Math.max(0,subLT_ImageXY[1]);
+            int startCol = Math.max(0,subLT_ImageXY[0]);
+            int endRow = Math.min(uiRows,subRB_ImageXY[1]+1);
+            int endCol = Math.min(uiCols,subRB_ImageXY[0]+1);
+            for (int y = startRow; y < endRow; y++) {
+                for (int x = startCol; x < endCol; x++) {
                     // tif
                     //logger.info("==========start to transform==========");
                     double[] doubles = RasterProcess.imageXY2Geo(x, y, arrGeoTransform);

@@ -232,7 +232,7 @@ public class Test {
             if(subLT_ImageXY[0]>=0&&subLT_ImageXY[0]<=uiCols){
                 startCol = subLT_ImageXY[0];
             }
-            if(subRB_ImageXY[1]<=uiCols&&subRB_ImageXY[1]>=0){
+            if(subRB_ImageXY[0]<=uiCols&&subRB_ImageXY[0]>=0){
                 endCol = subRB_ImageXY[0];
             }
             if(subLT_ImageXY[1]>=0&&subLT_ImageXY[1]<=uiRows){
