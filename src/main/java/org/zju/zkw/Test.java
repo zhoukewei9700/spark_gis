@@ -23,14 +23,12 @@ import org.zju.zkw.subimg.SubImage;
 import scala.Tuple2;
 import static org.zju.zkw.Constant.*;
 import javax.validation.constraints.NotNull;
+import javax.xml.crypto.Data;
 import java.io.*;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 import org.sqlite.JDBC;
 //import com.github.jaiimageio.*;
@@ -77,110 +75,112 @@ public class Test {
         gdal.AllRegister();
     }
     public static void main(String[] args) throws IOException, SQLException {
-
-        Connection conn = null;
-        try {
-            // db parameters
-            Class.forName("org.sqlite.JDBC");
-            //String url = "jdbc:sqlite:/root/zkw/mbtiles/test.mbtiles";
-            String url = "jdbc:sqlite:D:\\ZJU_GIS\\mbtile\\test.mbtiles";
-            // create a connection to the database
-            conn = DriverManager.getConnection(url);
-
-            System.out.println("Connection to SQLite has been established.");
-
-        } catch (SQLException e) {
-            System.out.println(e.getMessage());
-        } catch (ClassNotFoundException e) {
-            throw new RuntimeException(e);
-        } finally {
-            try {
-                if (conn != null) {
-                    conn.close();
-                }
-            } catch (SQLException ex) {
-                System.out.println(ex.getMessage());
-            }
+        String tifFolder = "D:\\ZJU_GIS\\testpic\\pic2";
+        String pngFolder = "D:\\ZJU_GIS\\outPNG";
+        String zRange = "4-4";
+        String jsPath =" D:\\ZJU_GIS\\mbtile";
+        String mbtilesPath = "D:\\ZJU_GIS\\mbtile\\test.mbtiles";
+        String mbtilesFolder = "D:\\ZJU_GIS\\mbtile";
+        File fileDir = new File(tifFolder);
+        if (fileDir.isFile()) {
+            logger.error("Input should be a directory,exit");
+            System.exit(1);
+        }
+        //define zoom level
+        String[] zRangeArr = zRange.split("-");
+        if (zRangeArr.length != 2) {
+            logger.error("zRange should be like 'z1-z2', z1 & z2 should be integer in 0-15!");
+            System.exit(1);
+        }
+        int minZ = Integer.parseInt(zRangeArr[0]);
+        int maxZ = Integer.parseInt(zRangeArr[1]);
+        if (minZ > maxZ) {
+            logger.error("zRange should be like 'z1-z2', z1 should be less than z2!");
+            System.exit(1);
         }
 
+        //spark setup
+        SparkSession ss = SparkSession
+                .builder()
+                .master("local[*]")
+                .appName("subImage")
+                .getOrCreate();
+        JavaSparkContext sc = new JavaSparkContext(ss.sparkContext());
+
+        //从高到低逐层切片
+        for (int zoomLevel = maxZ; zoomLevel >= minZ; zoomLevel--) {
+            //创建瓦片信息
+            //final int zoomLevelf = zoomLevel;
+            double dResolution = zResolution.get(zoomLevel);
+            List<Tuple2<String, RasterInfo>> mapSubdivision = RasterProcess.createMapSubdivision(
+                    new Extent(-20026376.39, 20026376.39, -20048966.10, 20048966.10),
+                    zoomLevel, 256, 256, BAND_NUM, PROJECT, pngFolder);
+            //创建一个hash表用来存sub的信息
+            HashMap<String, Extent> subInfo = new HashMap<>();
+            Driver memDriver = gdal.GetDriverByName("MEM");
+            Driver pngDriver = gdal.GetDriverByName("PNG");
+            Dataset memDataset;
+            Dataset pngDataset = null;
+            for (Tuple2<String, RasterInfo> sub : mapSubdivision) {
+                memDataset = memDriver.Create("", 256, 256, 3, gdalconst.GDT_Byte);
+                pngDataset = pngDriver.CreateCopy(sub._1, memDataset);
+                subInfo.put(sub._1, sub._2().getExtent());
+            }
+            memDriver.delete();
+            pngDataset.delete();
+
+            //读取所有tif
+            List<String> allTif = new ArrayList<>();
+            for (String fileSubDir : Objects.requireNonNull(fileDir.list())) {
+                //String[] tifList = new File(tifFolder + "/" + fileSubDir).list();
+                String[] tifList = new File(tifFolder +"\\"+ fileSubDir).list();
+                if (tifList == null) {
+                    continue;
+                }
+                List<String> filter = Arrays.stream(Objects.requireNonNull(tifList))
+                        //.filter(f -> f.endsWith(".tif")).map(f -> tifFolder + "/" + fileSubDir + "/" + f).collect(Collectors.toList());
+                .filter(f -> f.endsWith(".tif")).map(f -> tifFolder +"\\"+ fileSubDir + "\\"+ f).collect(Collectors.toList());
+                allTif.addAll(filter);
+            }
+            //创建RDD
+            JavaRDD<String> allTifRDD = sc.parallelize(allTif).repartition(sc.defaultParallelism());
 
 
-//        File f = new File("D:\\ZJU_GIS\\OutImg\\4\\1\\0.TIF");
-//        File pre = f.getParentFile().getParentFile().getParentFile();
-//        File finalFile = new File("D:\\ZJU_GIS\\outPNG"+"\\"+f.toString().replace(pre.toString(),""));
-//        String fName = removeExtension(finalFile.getName());
-//        String pngOut = finalFile.getParent()+"\\"+fName+".png";
+            //判断是否重合并填充png
+            //Connection finalConn = conn;
+            allTifRDD.flatMapToPair(
+                            (PairFlatMapFunction<String, String, String>) tif -> {
+                                List<Tuple2<String, String>> overlaps = new ArrayList<>();
 
+                                Dataset imgSrc = gdal.Open(tif, gdalconst.GA_ReadOnly);//打开tif
+                                SpatialReference destSR = new SpatialReference(PROJECT);//先做投影变换，将投影转换成web墨卡托
+                                CoordinateTransformation ct = new CoordinateTransformation(imgSrc.GetSpatialRef(), destSR);
 
-//    String tif="D:\\ZJU_GIS\\testpic\\pic1\\LT05\\LT05_L1TP_119039_20110730_20161007_01_T1_B1.TIF";
-//    Dataset dst = gdal.Open(tif);
-//    //int band=1;
-//    for(int i=0;i<dst.getRasterYSize();i++){
-//        for(int j=0;j<dst.getRasterXSize();j++){
-//            short[] imgArray = new short[1];
-//            for(int band=1;band<=dst.getRasterCount();band++) {
-//                dst.ReadRaster(i, j, 1, 1, 1, 1, gdalconst.GDT_UInt16, imgArray, new int[]{band});
-//                if(imgArray[0]!=0){
-//                    System.out.print(imgArray[0]+" ");
-//                }
-//
-//            }
-//        }
-//        System.out.println();
-//    }
-//        SparkSession ss = SparkSession
-//                .builder()
-//                .master("local[*]")
-//                .appName("subImage")
-//                .getOrCreate();
-//        JavaSparkContext sc = new JavaSparkContext(ss.sparkContext());
-//        String tifFolder = "D:\\ZJU_GIS\\testpic\\pic1";
-//        File fileDir = new File(tifFolder);
-//        if(fileDir.isFile()){
-//            logger.error("Input should be a directory,exit");
-//            System.exit(1);
-//        }
-//        List<Tuple2<String, RasterInfo>> mapSubdivision = RasterProcess.createMapSubdivision(
-//                new Extent(-20026376.39, 20026376.39, -20048966.10, 20048966.10),
-//                4,256,256,BAND_NUM,PROJECT,"D:\\ZJU_GIS\\OutImg");
-//        List<String> allTif = new ArrayList<>();
-//        for(String fileSubDir: Objects.requireNonNull(fileDir.list())) {
-//            String[] tifList = new File(tifFolder +"\\"+ fileSubDir).list();
-//            if (tifList == null) {
-//                continue;
-//            }
-//            List<String> filter = Arrays.stream(Objects.requireNonNull(tifList))
-//                    .filter(f -> f.endsWith(".TIF")).map(f -> tifFolder +"\\"+ fileSubDir + "\\"+ f).collect(Collectors.toList());
-//            allTif.addAll(filter);
-//        }
-//        //创建RDD
-//        JavaRDD<String> allTifRDD = sc.parallelize(allTif).repartition(sc.defaultParallelism());
-//        allTifRDD.flatMapToPair(
-//                        (PairFlatMapFunction<String,String,String>) tif->{
-//                            List<Tuple2<String,String>> overlaps = new ArrayList<>();
-//
-//                            Dataset imgSrc = gdal.Open(tif,gdalconst.GA_ReadOnly);//打开tif
-//                            SpatialReference destSR = new SpatialReference(PROJECT);//先做投影变换，将投影转换成web墨卡托
-//                            CoordinateTransformation ct = new CoordinateTransformation(imgSrc.GetSpatialRef(),destSR);
-//
-//                            for(Tuple2<String,RasterInfo> sub:mapSubdivision){//和空白的切片分幅判断是否重合
-//                                logger.info("intersect or not: "+tif+ " "+sub._1 );
-//                                if(RasterProcess.getExtent(imgSrc,ct).intersect(sub._2.getExtent())){
-//                                    overlaps.add(new Tuple2<>(sub._1,tif));
-//                                }
-//                            }
-//                            imgSrc.delete();
-//                            return overlaps.iterator();
-//                        }).groupByKey()
-//                .map((Function<Tuple2<String, Iterable<String>>,String>) kv -> {
-//                    List<String> list = IteratorUtils.toList(kv._2.iterator());
-//                    logger.info("fill map: " + kv._1 + " " + list);
-//                    return fillSub(kv._1,list);
-//                    //return "1";
-//                })
-//                .foreach(logger::error);
+                                for (Tuple2<String, RasterInfo> sub : mapSubdivision) {//和空白的切片分幅判断是否重合
+                                    logger.info("intersect or not: " + tif + " " + sub._1);
+                                    if (RasterProcess.getExtent(imgSrc, ct).intersect(sub._2.getExtent())) {
+                                        overlaps.add(new Tuple2<>(sub._1, tif));
+                                    }
+                                }
+                                imgSrc.delete();
+                                return overlaps.iterator();
+                            }).groupByKey()
+                    .map((Function<Tuple2<String, Iterable<String>>, String>) kv -> {
+                        List<String> list = IteratorUtils.toList(kv._2.iterator());
+                        logger.info("start to fillsub: "+kv._1);
+                        Extent extent = subInfo.get(kv._1);
+                        return fillSub(kv._1, list, extent, dResolution);
+                        //return "1";
+                    })
+                    .foreach(sub -> {
+                        logger.info("fillsub finished " + sub);
 
-
+                    });
+        }
+        sc.stop();
+        sc.close();
+        ss.stop();
+        ss.close();
     }
 
     private static String removeExtension(String fName) {
@@ -191,14 +191,18 @@ public class Test {
         else
             return fName;
     }
-    private static String fillSub(String sub,List<String> tifs) {
+    private static String fillSub(String sub, List<String> tifs, Extent extent, double dRes) {
         double dMapX, dMapY;  //
         int iDestX, iDestY;
         short[] imgArray = new short[1];
         CoordinateTransformation ct = null;
+        logger.info("start to fillsub: " + sub);
+        int xSize = 256;
+        int ySize = 256;
+        int nBand = 3;
 
-        Dataset dsDest = gdal.Open(sub, gdalconst.GF_Write);  //打开瓦片准备写入
-
+        //Dataset dsDest = gdal.Open(sub, gdalconst.GF_Write);  //打开瓦片准备写入
+        int[][] tempImgArray = new int[BAND_NUM][65536];
         for (String tif : tifs) {
             Dataset dsSrc = gdal.Open(tif, gdalconst.GF_Read);
             int uiCols = dsSrc.GetRasterXSize();
@@ -206,17 +210,45 @@ public class Test {
             int uiBands = dsSrc.GetRasterCount();
 
             SpatialReference srcSR = dsSrc.GetSpatialRef();
-            SpatialReference destSR = dsDest.GetSpatialRef();
+            SpatialReference destSR = new SpatialReference(PROJECT);//新投影为WEB墨卡托
             ct = new CoordinateTransformation(srcSR, destSR);
-
 
             double[] arrGeoTransform = new double[6];
             dsSrc.GetGeoTransform(arrGeoTransform);
 
+            //筛选和tif相交的部分
+            double[] subLT = {extent.getMinX(), extent.getMaxY()};
+            double[] subRB = {extent.getMaxX(), extent.getMinY()};
+            CoordinateTransformation ct2 = new CoordinateTransformation(destSR,srcSR);//从瓦片的坐标系转换到tif的坐标系
+            double[] subLT_trans = ct2.TransformPoint(subLT[0],subLT[1]);
+            double[] subRB_trans = ct2.TransformPoint(subRB[0],subRB[1]);
+            int[] subLT_ImageXY = RasterProcess.geo2ImageXY(subLT_trans[0],subLT_trans[1],arrGeoTransform);
+            int[] subRB_ImageXY = RasterProcess.geo2ImageXY(subRB_trans[0],subRB_trans[1],arrGeoTransform);
+            int startCol=0;
+            int startRow=0;
+            int endCol = uiCols;
+            int endRow = uiRows;
+            //判断是否越过原图像边界
+            if(subLT_ImageXY[0]>=0&&subLT_ImageXY[0]<=uiCols){
+                startCol = subLT_ImageXY[0];
+            }
+            if(subRB_ImageXY[1]<=uiCols&&subRB_ImageXY[1]>=0){
+                endCol = subRB_ImageXY[0];
+            }
+            if(subLT_ImageXY[1]>=0&&subLT_ImageXY[1]<=uiRows){
+                startRow = subLT_ImageXY[1];
+            }
+            if(subRB_ImageXY[1]<=uiRows&&subRB_ImageXY[1]>=0){
+                endRow = subRB_ImageXY[1];
+            }
+
             //resample
-            for (int y = 0; y < uiRows; y++) {
-                for (int x = 0; x < uiCols; x++) {
+//            for (int y = 0; y<uiRows;y++){
+//                for(int x=0;x<uiCols;x++){
+            for (int y = startRow; y <= endRow; y++) {
+                for (int x = startCol; x <= endCol; x++) {
                     // tif
+                    //logger.info("==========start to transform==========");
                     double[] doubles = RasterProcess.imageXY2Geo(x, y, arrGeoTransform);
                     dMapX = doubles[0];
                     dMapY = doubles[1];
@@ -227,31 +259,50 @@ public class Test {
                     dMapX = xyTransformed[0];
                     dMapY = xyTransformed[1];
 
-                    // subfile
-                    int[] ints = RasterProcess.geo2ImageXY(dMapX, dMapY, dsDest.GetGeoTransform());
+                    // subfill
+                    double[] GT = {extent.getMinX(), dRes, 0.0, extent.getMaxY(), 0.0, -dRes};
+                    int[] ints = RasterProcess.geo2ImageXY(dMapX, dMapY, GT);
                     iDestX = ints[0];
                     iDestY = ints[1];
-
-                    if (!(iDestX < 0 || iDestX >= dsDest.GetRasterXSize() //判断是否超出瓦片边界
-                            || iDestY < 0 || iDestY >= dsDest.GetRasterYSize())) {
+                    //logger.info("===========start to read raster==========");
+                    if (!(iDestX < 0 || iDestX >= 256 //判断是否超出瓦片边界
+                            || iDestY < 0 || iDestY >= 256)) {
                         for (int iBand = 1; iBand <= uiBands; iBand++) {
                             // fill-in
+
                             dsSrc.ReadRaster(x, y, 1, 1, 1, 1, gdalconst.GDT_UInt16, imgArray, new int[]{iBand});
                             //if(imgArray[0]!=0){System.out.println("the pixel value is "+imgArray[0]+"  written to "+sub);}
-                            if(imgArray[0]>0){
-                                logger.info("write "+x+","+y+"  to  "+iDestX+","+iDestY);
-                                dsDest.WriteRaster(iDestX, iDestY, 1, 1, 1, 1, gdalconst.GDT_UInt16, imgArray, new int[]{iBand});
+                            if (imgArray[0] > 0) {
+                                tempImgArray[iBand - 1][256 * iDestY + iDestX] = imgArray[0];//将所有数值插入临时数组
                             }
-                            //dsDest.WriteRaster(iDestX, iDestY, 1, 1, 1, 1, gdalconst.GDT_UInt16, imgArray, new int[]{iBand});
                         }
                     }
+                    //logger.info("===========read raster finished==========");
                 }
             }
-
+            logger.info("====================Insert into tempArray Finished====================");
             dsSrc.delete();
         }
-        dsDest.FlushCache();
-        dsDest.delete();
-        return "Finished";
+        Driver memDriver = gdal.GetDriverByName("MEM");
+        Dataset memDataset = memDriver.Create("", xSize, ySize, BAND_NUM, gdalconst.GDT_Byte);
+        for (int i = 1; i <= BAND_NUM; i++) {
+            byte[] imgArray2 = RasterProcess.compress(tempImgArray[i - 1], ySize, xSize, 0.02, 0.98);
+            memDataset.WriteRaster(0, 0, xSize, ySize, xSize, ySize, gdalconst.GDT_Byte, imgArray2, new int[]{i});
+        }
+        logger.info("====================Write into memDataset Finished====================");
+        Driver pngDriver = gdal.GetDriverByName("PNG");
+        Dataset pngDataset = pngDriver.CreateCopy(sub, memDataset);
+        logger.info("====================Createcopy Finished====================");
+        if (pngDataset == null)
+            return "fillsub failed!";
+        else {
+            pngDataset.delete();
+            memDataset.delete();
+
+        }
+        logger.info("Finished");
+        //dsDest.FlushCache();
+        //dsDest.delete();
+        return sub;
     }
 }

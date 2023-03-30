@@ -237,10 +237,39 @@ public class SubImageV3 {
             double[] arrGeoTransform = new double[6];
             dsSrc.GetGeoTransform(arrGeoTransform);
 
+            //筛选和tif相交的部分
+            double[] subLT = {extent.getMinX(), extent.getMaxY()};
+            double[] subRB = {extent.getMaxX(), extent.getMinY()};
+            CoordinateTransformation ct2 = new CoordinateTransformation(destSR,srcSR);//从瓦片的坐标系转换到tif的坐标系
+            double[] subLT_trans = ct2.TransformPoint(subLT[0],subLT[1]);
+            double[] subRB_trans = ct2.TransformPoint(subRB[0],subRB[1]);
+            int[] subLT_ImageXY = RasterProcess.geo2ImageXY(subLT_trans[0],subLT_trans[1],arrGeoTransform);
+            int[] subRB_ImageXY = RasterProcess.geo2ImageXY(subRB_trans[0],subRB_trans[1],arrGeoTransform);
+            int startCol=0;
+            int startRow=0;
+            int endCol = uiCols;
+            int endRow = uiRows;
+            //判断是否越过原图像边界
+            if(subLT_ImageXY[0]>=0&&subLT_ImageXY[0]<=uiCols){
+                startCol = subLT_ImageXY[0];
+            }
+            if(subRB_ImageXY[1]<=uiCols&&subRB_ImageXY[1]>=0){
+                endCol = subRB_ImageXY[0];
+            }
+            if(subLT_ImageXY[1]>=0&&subLT_ImageXY[1]<=uiRows){
+                startRow = subLT_ImageXY[1];
+            }
+            if(subRB_ImageXY[1]<=uiRows&&subRB_ImageXY[1]>=0){
+                endRow = subRB_ImageXY[1];
+            }
+
             //resample
-            for (int y = 0; y < uiRows; y++) {
-                for (int x = 0; x < uiCols; x++) {
+//            for (int y = 0; y<uiRows;y++){
+//                for(int x=0;x<uiCols;x++){
+            for (int y = startRow; y <= endRow; y++) {
+                for (int x = startCol; x <= endCol; x++) {
                     // tif
+                    //logger.info("==========start to transform==========");
                     double[] doubles = RasterProcess.imageXY2Geo(x, y, arrGeoTransform);
                     dMapX = doubles[0];
                     dMapY = doubles[1];
@@ -256,11 +285,12 @@ public class SubImageV3 {
                     int[] ints = RasterProcess.geo2ImageXY(dMapX, dMapY, GT);
                     iDestX = ints[0];
                     iDestY = ints[1];
-
+                    //logger.info("===========start to read raster==========");
                     if (!(iDestX < 0 || iDestX >= 256 //判断是否超出瓦片边界
                             || iDestY < 0 || iDestY >= 256)) {
                         for (int iBand = 1; iBand <= uiBands; iBand++) {
                             // fill-in
+
                             dsSrc.ReadRaster(x, y, 1, 1, 1, 1, gdalconst.GDT_UInt16, imgArray, new int[]{iBand});
                             //if(imgArray[0]!=0){System.out.println("the pixel value is "+imgArray[0]+"  written to "+sub);}
                             if (imgArray[0] > 0) {
@@ -268,6 +298,7 @@ public class SubImageV3 {
                             }
                         }
                     }
+                    //logger.info("===========read raster finished==========");
                 }
             }
             logger.info("====================Insert into tempArray Finished====================");
@@ -295,6 +326,8 @@ public class SubImageV3 {
         //dsDest.delete();
         return sub;
     }
+
+
 
     private static String removeExtension(String fName) {
 

@@ -4,7 +4,7 @@ import java.util.HashMap;
 
 public class Constant {
     public static String EXTENT_SEPORATOR = " ";
-    public static int BAND_NUM = 1;
+    public static int BAND_NUM = 3;
 
     public static String TIF_FOLDER = "/root/zkw/testpic";
     public static String SUB_FOLDER = "/root/zkw/OutImg";

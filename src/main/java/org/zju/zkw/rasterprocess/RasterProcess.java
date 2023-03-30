@@ -193,7 +193,6 @@ public class RasterProcess {
                     }
                 }
 
-                //strImg = file.getPath()+"/"+String.format("%d.tif",(int)(Math.pow(2,zoomLevel))-i);
                 strImg = file.getPath()+"/"+String.format("%d.png",(int)(Math.pow(2,zoomLevel))-i);
                 //strImg = file.getPath()+"\\"+String.format("%d.png",(int)(Math.pow(2,zoomLevel))-i);
                 //strImg = file.getPath()+"\\"+String.format("%d.tif",16-i);
