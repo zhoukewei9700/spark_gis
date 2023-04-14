@@ -4,14 +4,14 @@ import java.util.HashMap;
 
 public class Constant {
     public static String EXTENT_SEPORATOR = " ";
-    public static int BAND_NUM = 3;
+    public static int BAND_NUM = 1;
 
     public static String TIF_FOLDER = "/root/zkw/testpic";
     public static String SUB_FOLDER = "/root/zkw/OutImg";
-    public static String PNG_FOLDER = "/root/zkw/OutPng";
+    public static String PNG_FOLDER = "/data1/hulinshu/zkw/OutPng";
     public static String JSON_PATH = "/root/zkw/mbtiles";
 
-    public static String TILE_DIR = "/root/zkw/OutPng";
+    public static String TILE_DIR = "/data1/hulinshu/zkw/OutPng";
 
     public static String MBTILES_DIR = "/root/zkw/mbtiles/testV2.mbtiles";
 

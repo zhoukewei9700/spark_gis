@@ -75,14 +75,19 @@ public class Test {
         gdal.AllRegister();
     }
     public static void main(String[] args) throws IOException, SQLException {
-        String tifFolder = "D:\\ZJU_GIS\\testpic\\pic2";
-        String pngFolder = "D:\\ZJU_GIS\\outPNG";
-        String zRange = "4-4";
-        String jsPath =" D:\\ZJU_GIS\\mbtile";
-        String mbtilesPath = "D:\\ZJU_GIS\\mbtile\\test.mbtiles";
-        String mbtilesFolder = "D:\\ZJU_GIS\\mbtile";
+//        String tifFolder = "D:\\ZJU_GIS\\testpic\\GLCFCS30_W180N75.tif";
+////        String pngFolder = "D:\\ZJU_GIS\\outPNG";
+////        String zRange = "4-4";
+////        String jsPath =" D:\\ZJU_GIS\\mbtile";
+////        String mbtilesPath = "D:\\ZJU_GIS\\mbtile\\test.mbtiles";
+////        String mbtilesFolder = "D:\\ZJU_GIS\\mbtile";
+        String tifFolder = args[0];
+        String pngFolder = args[1];
+        String zRange = args[2];
         File fileDir = new File(tifFolder);
-        if (fileDir.isFile()) {
+        logger.error("tifFolder: "+fileDir.getPath());
+        logger.error("fileDir : "+ Arrays.toString(fileDir.list()));
+        if (fileDir.isFile())  {
             logger.error("Input should be a directory,exit");
             System.exit(1);
         }
@@ -102,81 +107,11 @@ public class Test {
         //spark setup
         SparkSession ss = SparkSession
                 .builder()
-                .master("local[*]")
+                //.master("local[*]")
                 .appName("subImage")
                 .getOrCreate();
         JavaSparkContext sc = new JavaSparkContext(ss.sparkContext());
 
-        //从高到低逐层切片
-        for (int zoomLevel = maxZ; zoomLevel >= minZ; zoomLevel--) {
-            //创建瓦片信息
-            //final int zoomLevelf = zoomLevel;
-            double dResolution = zResolution.get(zoomLevel);
-            List<Tuple2<String, RasterInfo>> mapSubdivision = RasterProcess.createMapSubdivision(
-                    new Extent(-20026376.39, 20026376.39, -20048966.10, 20048966.10),
-                    zoomLevel, 256, 256, BAND_NUM, PROJECT, pngFolder);
-            //创建一个hash表用来存sub的信息
-            HashMap<String, Extent> subInfo = new HashMap<>();
-            Driver memDriver = gdal.GetDriverByName("MEM");
-            Driver pngDriver = gdal.GetDriverByName("PNG");
-            Dataset memDataset;
-            Dataset pngDataset = null;
-            for (Tuple2<String, RasterInfo> sub : mapSubdivision) {
-                memDataset = memDriver.Create("", 256, 256, 3, gdalconst.GDT_Byte);
-                pngDataset = pngDriver.CreateCopy(sub._1, memDataset);
-                subInfo.put(sub._1, sub._2().getExtent());
-            }
-            memDriver.delete();
-            pngDataset.delete();
-
-            //读取所有tif
-            List<String> allTif = new ArrayList<>();
-            for (String fileSubDir : Objects.requireNonNull(fileDir.list())) {
-                //String[] tifList = new File(tifFolder + "/" + fileSubDir).list();
-                String[] tifList = new File(tifFolder +"\\"+ fileSubDir).list();
-                if (tifList == null) {
-                    continue;
-                }
-                List<String> filter = Arrays.stream(Objects.requireNonNull(tifList))
-                        //.filter(f -> f.endsWith(".tif")).map(f -> tifFolder + "/" + fileSubDir + "/" + f).collect(Collectors.toList());
-                .filter(f -> f.endsWith(".tif")).map(f -> tifFolder +"\\"+ fileSubDir + "\\"+ f).collect(Collectors.toList());
-                allTif.addAll(filter);
-            }
-            //创建RDD
-            JavaRDD<String> allTifRDD = sc.parallelize(allTif).repartition(sc.defaultParallelism());
-
-
-            //判断是否重合并填充png
-            //Connection finalConn = conn;
-            allTifRDD.flatMapToPair(
-                            (PairFlatMapFunction<String, String, String>) tif -> {
-                                List<Tuple2<String, String>> overlaps = new ArrayList<>();
-
-                                Dataset imgSrc = gdal.Open(tif, gdalconst.GA_ReadOnly);//打开tif
-                                SpatialReference destSR = new SpatialReference(PROJECT);//先做投影变换，将投影转换成web墨卡托
-                                CoordinateTransformation ct = new CoordinateTransformation(imgSrc.GetSpatialRef(), destSR);
-
-                                for (Tuple2<String, RasterInfo> sub : mapSubdivision) {//和空白的切片分幅判断是否重合
-                                    logger.info("intersect or not: " + tif + " " + sub._1);
-                                    if (RasterProcess.getExtent(imgSrc, ct).intersect(sub._2.getExtent())) {
-                                        overlaps.add(new Tuple2<>(sub._1, tif));
-                                    }
-                                }
-                                imgSrc.delete();
-                                return overlaps.iterator();
-                            }).groupByKey()
-                    .map((Function<Tuple2<String, Iterable<String>>, String>) kv -> {
-                        List<String> list = IteratorUtils.toList(kv._2.iterator());
-                        logger.info("start to fillsub: "+kv._1);
-                        Extent extent = subInfo.get(kv._1);
-                        return fillSub(kv._1, list, extent, dResolution);
-                        //return "1";
-                    })
-                    .foreach(sub -> {
-                        logger.info("fillsub finished " + sub);
-
-                    });
-        }
         sc.stop();
         sc.close();
         ss.stop();

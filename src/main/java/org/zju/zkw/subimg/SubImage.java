@@ -83,9 +83,9 @@ public class SubImage {
 
         //input,output
         String tifFolder = args[0];
-        String subOut = SUB_FOLDER;
+        String subOut = args[1];
         String subFolder = SUB_FOLDER;
-        String pngFolder = args[1];
+        //String pngFolder = args[1];
         String jsonPath = JSON_PATH;
         String mbtilesPath = MBTILES_DIR;
         String mbutilPath = MBUTIL_DIR;
@@ -156,7 +156,7 @@ public class SubImage {
                         CoordinateTransformation ct = new CoordinateTransformation(imgSrc.GetSpatialRef(),destSR);
 
                         for(Tuple2<String,RasterInfo> sub:mapSubdivision){//和空白的切片分幅判断是否重合
-                            logger.info("intersect or not: "+tif+ " "+sub._1 );
+                            //logger.info("intersect or not: "+tif+ " "+sub._1 );
                             if(RasterProcess.getExtent(imgSrc,ct).intersect(sub._2.getExtent())){
                                 overlaps.add(new Tuple2<>(sub._1,tif));
                             }
@@ -171,83 +171,83 @@ public class SubImage {
                         //return "1";
                     })
                     .foreach(logger::error);
-
+        }
             //TIF转PNG
-            List<String> allSubs = new ArrayList<>();
-
-            File pngDir = new File(subFolder);
-            if(pngDir.isFile()){
-                logger.error("Input should be a directory,exit");
-                System.exit(1);
-            }
-            //栅格图像目录下的所有tif文件
-            for(String fileSubDir: Objects.requireNonNull(pngDir.list())) {
-                File file = new File(pngFolder+"/"+fileSubDir);
-                if(!file.exists()){
-                    file.mkdirs();
-                }
-                for (String yList : Objects.requireNonNull(new File(subFolder +"/"+ fileSubDir).list())) {
-                    File file2 = new File(pngFolder+"/"+fileSubDir+"/"+yList);
-                    if(!file2.exists()){
-                        file2.mkdirs();
-                    }
-                    String[] pngList = new File(subFolder +"/"+ fileSubDir +"/"+ yList).list();
-                    if (pngList == null) {
-                        continue;
-                    }
-                    List<String> filter = Arrays.stream(Objects.requireNonNull(pngList))
-                            .filter(f -> f.endsWith(".tif")).map(f -> subFolder +"/"+ fileSubDir +"/"+ yList + "/" + f).collect(Collectors.toList());
-                    allSubs.addAll(filter);
-                }
-            }
-            JavaRDD<String> allSubRDD = sc.parallelize(allSubs).repartition(sc.defaultParallelism());
-            allSubRDD.foreach(sub -> {
-                File f = new File(sub);
-                File pre = f.getParentFile().getParentFile().getParentFile();
-                File finalFile = new File(pngFolder+"/"+f.toString().replace(pre.toString(),""));
-                String fName = removeExtension(finalFile.getName());
-                String pngOut = finalFile.getParent()+"/"+fName+".png";
-                Dataset tifDataset = gdal.Open(sub,gdalconst.GF_Read);
-                boolean isConvertSuccess = RasterProcess.convertTIF2PNG(pngOut,tifDataset);
-                if(!isConvertSuccess){
-                    logger.error("failed when converting "+sub+" to png");
-                }
-
-            });
-        }
-        //生成mbtiles
-
-        File jsonFile = new File(jsonPath+"/"+"metadata.json");
-        if(!jsonFile.exists()){
-            try{
-                jsonFile.createNewFile();
-            }catch (IOException ex){
-                ex.printStackTrace();
-            }
-        }
-        //获取坐标
-//        int nRow = ds.getRasterYSize();
-//        int nCol = ds.getRasterXSize();
-//        double[] coordLB = RasterProcess.imageXY2Geo(ds,0,nRow);//左下
-//        double[] LB = RasterProcess.pro2geo(ds,coordLB[0],coordLB[1]);
+//            List<String> allSubs = new ArrayList<>();
 //
-//        double[] coordRT = RasterProcess.imageXY2Geo(ds,nCol,0);//右上
-//        double[] RT = RasterProcess.pro2geo(ds,coordRT[0],coordRT[1]);
-        String version = "\"1.2\"";
-        String bounds = "\""+"20026376.39"+","+"-20048966.10"+","+"20026376.39"+","+"20048966.10"+"\"";
-        String description = "\"sub pic\"";
-        String json = "{\"version\":"+version+","+"\"bounds\":"+bounds+",\"description\":"+description
-                +",\"format\":\"png\"}";
-        try{
-            BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(jsonFile),"UTF-8"));
-            out.write(json);
-            out.flush();
-            out.close();
-        }catch (Exception e){
-            e.printStackTrace();
-        }
-
-        callCMD(pngFolder,mbtilesPath,mbutilPath);
+//            File pngDir = new File(subFolder);
+//            if(pngDir.isFile()){
+//                logger.error("Input should be a directory,exit");
+//                System.exit(1);
+//            }
+//            //栅格图像目录下的所有tif文件
+//            for(String fileSubDir: Objects.requireNonNull(pngDir.list())) {
+//                File file = new File(pngFolder+"/"+fileSubDir);
+//                if(!file.exists()){
+//                    file.mkdirs();
+//                }
+//                for (String yList : Objects.requireNonNull(new File(subFolder +"/"+ fileSubDir).list())) {
+//                    File file2 = new File(pngFolder+"/"+fileSubDir+"/"+yList);
+//                    if(!file2.exists()){
+//                        file2.mkdirs();
+//                    }
+//                    String[] pngList = new File(subFolder +"/"+ fileSubDir +"/"+ yList).list();
+//                    if (pngList == null) {
+//                        continue;
+//                    }
+//                    List<String> filter = Arrays.stream(Objects.requireNonNull(pngList))
+//                            .filter(f -> f.endsWith(".tif")).map(f -> subFolder +"/"+ fileSubDir +"/"+ yList + "/" + f).collect(Collectors.toList());
+//                    allSubs.addAll(filter);
+//                }
+//            }
+//            JavaRDD<String> allSubRDD = sc.parallelize(allSubs).repartition(sc.defaultParallelism());
+//            allSubRDD.foreach(sub -> {
+//                File f = new File(sub);
+//                File pre = f.getParentFile().getParentFile().getParentFile();
+//                File finalFile = new File(pngFolder+"/"+f.toString().replace(pre.toString(),""));
+//                String fName = removeExtension(finalFile.getName());
+//                String pngOut = finalFile.getParent()+"/"+fName+".png";
+//                Dataset tifDataset = gdal.Open(sub,gdalconst.GF_Read);
+//                boolean isConvertSuccess = RasterProcess.convertTIF2PNG(pngOut,tifDataset);
+//                if(!isConvertSuccess){
+//                    logger.error("failed when converting "+sub+" to png");
+//                }
+//
+//            });
+//        }
+//        //生成mbtiles
+//
+//        File jsonFile = new File(jsonPath+"/"+"metadata.json");
+//        if(!jsonFile.exists()){
+//            try{
+//                jsonFile.createNewFile();
+//            }catch (IOException ex){
+//                ex.printStackTrace();
+//            }
+//        }
+//        //获取坐标
+////        int nRow = ds.getRasterYSize();
+////        int nCol = ds.getRasterXSize();
+////        double[] coordLB = RasterProcess.imageXY2Geo(ds,0,nRow);//左下
+////        double[] LB = RasterProcess.pro2geo(ds,coordLB[0],coordLB[1]);
+////
+////        double[] coordRT = RasterProcess.imageXY2Geo(ds,nCol,0);//右上
+////        double[] RT = RasterProcess.pro2geo(ds,coordRT[0],coordRT[1]);
+//        String version = "\"1.2\"";
+//        String bounds = "\""+"20026376.39"+","+"-20048966.10"+","+"20026376.39"+","+"20048966.10"+"\"";
+//        String description = "\"sub pic\"";
+//        String json = "{\"version\":"+version+","+"\"bounds\":"+bounds+",\"description\":"+description
+//                +",\"format\":\"png\"}";
+//        try{
+//            BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(jsonFile),"UTF-8"));
+//            out.write(json);
+//            out.flush();
+//            out.close();
+//        }catch (Exception e){
+//            e.printStackTrace();
+//        }
+//
+//        callCMD(pngFolder,mbtilesPath,mbutilPath);
     }
 
 
@@ -315,6 +315,7 @@ public class SubImage {
 
             dsSrc.delete();
         }
+        logger.info("fillsub finished");
         dsDest.FlushCache();
         dsDest.delete();
         return "Finished";
