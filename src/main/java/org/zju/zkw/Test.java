@@ -75,47 +75,35 @@ public class Test {
         gdal.AllRegister();
     }
     public static void main(String[] args) throws IOException, SQLException {
-//        String tifFolder = "D:\\ZJU_GIS\\testpic\\GLCFCS30_W180N75.tif";
-////        String pngFolder = "D:\\ZJU_GIS\\outPNG";
-////        String zRange = "4-4";
-////        String jsPath =" D:\\ZJU_GIS\\mbtile";
-////        String mbtilesPath = "D:\\ZJU_GIS\\mbtile\\test.mbtiles";
-////        String mbtilesFolder = "D:\\ZJU_GIS\\mbtile";
-        String tifFolder = args[0];
-        String pngFolder = args[1];
-        String zRange = args[2];
-        File fileDir = new File(tifFolder);
-        logger.error("tifFolder: "+fileDir.getPath());
-        logger.error("fileDir : "+ Arrays.toString(fileDir.list()));
-        if (fileDir.isFile())  {
-            logger.error("Input should be a directory,exit");
-            System.exit(1);
-        }
-        //define zoom level
-        String[] zRangeArr = zRange.split("-");
-        if (zRangeArr.length != 2) {
-            logger.error("zRange should be like 'z1-z2', z1 & z2 should be integer in 0-15!");
-            System.exit(1);
-        }
-        int minZ = Integer.parseInt(zRangeArr[0]);
-        int maxZ = Integer.parseInt(zRangeArr[1]);
-        if (minZ > maxZ) {
-            logger.error("zRange should be like 'z1-z2', z1 should be less than z2!");
-            System.exit(1);
-        }
+        String tif = "D:\\ZJU_GIS\\testpic\\pic3\\2015\\GLCFCS30_E120N35.tif";
+        Dataset dsSrc = gdal.Open(tif,gdalconst.GF_Read);
 
-        //spark setup
-        SparkSession ss = SparkSession
-                .builder()
-                //.master("local[*]")
-                .appName("subImage")
-                .getOrCreate();
-        JavaSparkContext sc = new JavaSparkContext(ss.sparkContext());
+        CoordinateTransformation ct = null;
+        int uiCols = dsSrc.GetRasterXSize();
+        int uiRows = dsSrc.GetRasterYSize();
+        int uiBands = dsSrc.GetRasterCount();
+        short[] imgArray = new short[uiCols*uiRows];
+        double dMapX, dMapY;  //
+        int iDestX, iDestY;
+        SpatialReference srcSR = dsSrc.GetSpatialRef();
+        SpatialReference destSR = new SpatialReference(PROJECT);//新投影为WEB墨卡托
+        ct = new CoordinateTransformation(srcSR, destSR);
 
-        sc.stop();
-        sc.close();
-        ss.stop();
-        ss.close();
+        double[] arrGeoTransform = new double[6];
+        dsSrc.GetGeoTransform(arrGeoTransform);
+        Date startdate = new Date();
+        System.out.println(startdate);
+        dsSrc.ReadRaster(0,0,uiCols,uiRows,uiCols,uiRows,gdalconst.GDT_UInt16,imgArray,new int[]{1});
+        for(int y=0;y<uiRows;y++){
+            for(int x=0;x<uiCols;x++){
+                if(imgArray[y*uiCols+x]>0) {
+                    System.out.print(x + " " + y);break;
+                }
+            }
+            System.out.println("");
+        }
+        Date enddate = new Date();
+        System.out.println(enddate);
     }
 
     private static String removeExtension(String fName) {

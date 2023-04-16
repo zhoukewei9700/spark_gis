@@ -90,9 +90,9 @@ public class SubImageV3 {
     public static void main(String @NotNull [] args) throws SQLException, IOException, InterruptedException {
         logger.info("=======subimage start=======");
         //input,output
-//        String tifFolder = "D:\\ZJU_GIS\\testpic\\pic2";
+//        String tifFolder = "D:\\ZJU_GIS\\testpic\\pic3";
 //        String pngFolder = "D:\\ZJU_GIS\\outPNG";
-//        String zRange = "2-4";
+//        String zRange = "1-1";
 //        String jsPath =" D:\\ZJU_GIS\\mbtile";
 //        String mbtilesPath = "D:\\ZJU_GIS\\mbtile\\test.mbtiles";
 //        String mbtilesFolder = "D:\\ZJU_GIS\\mbtile";
@@ -138,7 +138,7 @@ public class SubImageV3 {
                 continue;
             }
             List<String> filter = Arrays.stream(Objects.requireNonNull(tifList))
-                    .filter(f -> f.endsWith(".tif")).map(f -> tifFolder + "/" + fileSubDir + "/" + f).collect(Collectors.toList());
+                    .filter(f -> f.endsWith(".png")).map(f -> tifFolder + "/" + fileSubDir + "/" + f).collect(Collectors.toList());
                     //.filter(f -> f.endsWith(".tif")).map(f -> tifFolder +"\\"+ fileSubDir + "\\"+ f).collect(Collectors.toList());
             allTif.addAll(filter);
         }
@@ -154,7 +154,7 @@ public class SubImageV3 {
                     new Extent(-20026376.39, 20026376.39, -20048966.10, 20048966.10),
                     zoomLevel, 256, 256, BAND_NUM, PROJECT, pngFolder);
             //创建一个hash表用来存sub的信息
-            HashMap<String, Extent> subInfo = new HashMap<>();
+            HashMap<String, Extent> subInfo = new HashMap< >();
             Driver memDriver = gdal.GetDriverByName("MEM");
             Driver pngDriver = gdal.GetDriverByName("PNG");
             for (Tuple2<String, RasterInfo> sub : mapSubdivision) {
@@ -168,9 +168,9 @@ public class SubImageV3 {
             allTifRDD.flatMapToPair(
                             (PairFlatMapFunction<String, String, String>) tif -> {
                                 List<Tuple2<String, String>> overlaps = new ArrayList<>();
-                                logger.info("tif: "+tif);
+                                //logger.info("tif: "+tif);
                                 Dataset imgSrc = gdal.Open(tif, gdalconst.GA_ReadOnly);//打开tif
-                                logger.info("Dataser imgSrc: "+imgSrc);
+                                //logger.info("Dataser imgSrc: "+imgSrc);
                                 SpatialReference destSR = new SpatialReference(PROJECT);//先做投影变换，将投影转换成web墨卡托
                                 CoordinateTransformation ct = new CoordinateTransformation(imgSrc.GetSpatialRef(), destSR);
 
@@ -200,20 +200,12 @@ public class SubImageV3 {
         ss.stop();
         ss.close();
 
-        //导入mbtiles
-//        String command = "mb-uitl --scheme=tms "+pngFolder+" "+mbtilesPath;
-//        Runtime runtime = Runtime.getRuntime();
-//        Process process = runtime.exec(new String[]{"/bin/sh","-c",command});
-//        int res = process.waitFor();
-//        if(res!=0){
-//            logger.error("insert failed!");
-//        }
     }
 
     private static String fillSub(String sub, List<String> tifs, Extent extent, double dRes) {
         double dMapX, dMapY;  //
         int iDestX, iDestY;
-        short[] imgArray = new short[1];
+
         CoordinateTransformation ct = null;
         logger.info("start to fillsub: " + sub);
         int xSize = 256;
@@ -221,13 +213,16 @@ public class SubImageV3 {
         int nBand = 3;
 
         //Dataset dsDest = gdal.Open(sub, gdalconst.GF_Write);  //打开瓦片准备写入
+
         int[][] tempImgArray = new int[BAND_NUM][65536];
         for (String tif : tifs) {
+            logger.info("====================start to read raster " + tif + "====================");
             Dataset dsSrc = gdal.Open(tif, gdalconst.GF_Read);
             int uiCols = dsSrc.GetRasterXSize();
             int uiRows = dsSrc.GetRasterYSize();
             int uiBands = dsSrc.GetRasterCount();
-
+            short[] imgArray = new short[uiRows*uiCols];
+            dsSrc.ReadRaster(0, 0, uiCols, uiRows, uiCols, uiRows, gdalconst.GDT_UInt16, imgArray, new int[]{1});
             SpatialReference srcSR = dsSrc.GetSpatialRef();
             SpatialReference destSR = new SpatialReference(PROJECT);//新投影为WEB墨卡托
             ct = new CoordinateTransformation(srcSR, destSR);
@@ -245,26 +240,11 @@ public class SubImageV3 {
             int[] subRB_ImageXY = RasterProcess.geo2ImageXY(subRB_trans[0],subRB_trans[1],arrGeoTransform);
 
             //判断是否越过原图像边界
-//            if(subLT_ImageXY[0]>=0&&subLT_ImageXY[0]<=uiCols){
-//                startCol = subLT_ImageXY[0];
-//            }
-//            if(subRB_ImageXY[0]<=uiCols&&subRB_ImageXY[0]>=0){
-//                endCol = subRB_ImageXY[0];
-//            }
-//            if(subLT_ImageXY[1]>=0&&subLT_ImageXY[1]<=uiRows){
-//                startRow = subLT_ImageXY[1];
-//            }
-//            if(subRB_ImageXY[1]<=uiRows&&subRB_ImageXY[1]>=0){
-//                endRow = subRB_ImageXY[1];
-//            }
-
-            //resample
-//            for (int y = 0; y<uiRows;y++){
-//                for(int x=0;x<uiCols;x++){
             int startRow = Math.max(0,subLT_ImageXY[1]);
             int startCol = Math.max(0,subLT_ImageXY[0]);
-            int endRow = Math.min(uiRows,subRB_ImageXY[1]+1);
-            int endCol = Math.min(uiCols,subRB_ImageXY[0]+1);
+            int endRow = Math.min(uiRows,Math.abs(subRB_ImageXY[1])+1);
+            int endCol = Math.min(uiCols,Math.abs(subRB_ImageXY[0])+1);
+            logger.info("====================start to insert tempArray====================");
             for (int y = startRow; y < endRow; y++) {
                 for (int x = startCol; x < endCol; x++) {
                     // tif
@@ -287,15 +267,11 @@ public class SubImageV3 {
                     //logger.info("===========start to read raster==========");
                     if (!(iDestX < 0 || iDestX >= 256 //判断是否超出瓦片边界
                             || iDestY < 0 || iDestY >= 256)) {
-                        for (int iBand = 1; iBand <= uiBands; iBand++) {
                             // fill-in
-
-                            dsSrc.ReadRaster(x, y, 1, 1, 1, 1, gdalconst.GDT_UInt16, imgArray, new int[]{iBand});
-                            //if(imgArray[0]!=0){System.out.println("the pixel value is "+imgArray[0]+"  written to "+sub);}
-                            if (imgArray[0] > 0) {
-                                tempImgArray[iBand - 1][256 * iDestY + iDestX] = imgArray[0];//将所有数值插入临时数组
+                        //logger.info(String.valueOf(imgArray[y*uiCols+x]));
+                            if (imgArray[y*uiCols+x] > 0) {
+                                tempImgArray[0][256 * iDestY + iDestX] = imgArray[y*uiCols+x];//将所有数值插入临时数组
                             }
-                        }
                     }
                     //logger.info("===========read raster finished==========");
                 }
