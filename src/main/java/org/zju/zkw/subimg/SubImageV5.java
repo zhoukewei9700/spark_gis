@@ -156,12 +156,12 @@ public class SubImageV5 {
                     zoomLevel, 256, 256, BAND_NUM, PROJECT, pngFolder);
             //创建一个hash表用来存sub的信息
             HashMap<String, Extent> subInfo = new HashMap< >();
-            Driver memDriver = gdal.GetDriverByName("MEM");
-            Driver pngDriver = gdal.GetDriverByName("PNG");
+//            Driver memDriver = gdal.GetDriverByName("MEM");
+//            Driver pngDriver = gdal.GetDriverByName("PNG");
             for (Tuple2<String, RasterInfo> sub : mapSubdivision) {
                 subInfo.put(sub._1, sub._2().getExtent());
-                Dataset memDataset = memDriver.Create("", 256, 256, BAND_NUM, gdalconst.GDT_Byte);
-                Dataset pngDataset = pngDriver.CreateCopy(sub._1, memDataset);
+//                Dataset memDataset = memDriver.Create("", 256, 256, BAND_NUM, gdalconst.GDT_Byte);
+//                Dataset pngDataset = pngDriver.CreateCopy(sub._1, memDataset);
             }
 
             //判断是否重合并填充png
@@ -236,7 +236,7 @@ public class SubImageV5 {
                     double[] pngGeoXY = RasterProcess.imageXY2Geo(x, y, GT);
                     double[] tifGeoXY = ct2.TransformPoint(pngGeoXY[0], pngGeoXY[1]);//将坐标转换成tif坐标系下的坐标
                     int[] tifImageXY = RasterProcess.geo2ImageXY(tifGeoXY[0], tifGeoXY[1], arrGeoTransform);//计算在tif上的像素坐标
-                    if (!(tifImageXY[0] < 0 || tifImageXY[0] > uiCols || tifImageXY[1] < 0 || tifImageXY[1] > uiRows)) {
+                    if (!(tifImageXY[0] < 0 || tifImageXY[0] >= uiCols || tifImageXY[1] < 0 || tifImageXY[1] >= uiRows)) {
                         dsSrc.ReadRaster(tifImageXY[0], tifImageXY[1], 1, 1, 1, 1, gdalconst.GDT_UInt16, imgArray, new int[]{1});
                         tempImgArray[0][y * 256 + x] = imgArray[0];
                     }
