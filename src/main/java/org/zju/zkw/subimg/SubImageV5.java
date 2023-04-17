@@ -44,7 +44,7 @@ import java.util.stream.Collectors;
 import static org.zju.zkw.Constant.*;
 
 
-public class SubImageV3 {
+public class SubImageV5 {
     private static final Logger logger = LoggerFactory.getLogger(SubImage.class);
     //wpsg:3857
     public static final String PROJECT = "PROJCRS[\"WGS 84 / Pseudo-Mercator\",\n" +
@@ -90,9 +90,9 @@ public class SubImageV3 {
     public static void main(String @NotNull [] args) throws SQLException, IOException, InterruptedException {
         logger.info("=======subimage start=======");
         //input,output
-//        String tifFolder = "D:\\ZJU_GIS\\testpic\\pic3";
+//        String tifFolder = "D:\\ZJU_GIS\\testpic\\pic2";
 //        String pngFolder = "D:\\ZJU_GIS\\outPNG";
-//        String zRange = "5-5";
+//        String zRange = "4-4";
 //        String jsPath =" D:\\ZJU_GIS\\mbtile";
 //        String mbtilesPath = "D:\\ZJU_GIS\\mbtile\\test.mbtiles";
 //        String mbtilesFolder = "D:\\ZJU_GIS\\mbtile";
@@ -216,69 +216,32 @@ public class SubImageV3 {
         //Dataset dsDest = gdal.Open(sub, gdalconst.GF_Write);  //打开瓦片准备写入
 
         int[][] tempImgArray = new int[BAND_NUM][65536];
+        double[] GT = {extent.getMinX(), dRes, 0.0, extent.getMaxY(), 0.0, -dRes};
         for (String tif : tifs) {
             logger.info("====================start to read raster " + tif + "====================");
             Dataset dsSrc = gdal.Open(tif, gdalconst.GF_Read);
             int uiCols = dsSrc.GetRasterXSize();
             int uiRows = dsSrc.GetRasterYSize();
             int uiBands = dsSrc.GetRasterCount();
-            short[] imgArray = new short[uiRows*uiCols];
-            dsSrc.ReadRaster(0, 0, uiCols, uiRows, uiCols, uiRows, gdalconst.GDT_UInt16, imgArray, new int[]{1});
             SpatialReference srcSR = dsSrc.GetSpatialRef();
             SpatialReference destSR = new SpatialReference(PROJECT);//新投影为WEB墨卡托
-            ct = new CoordinateTransformation(srcSR, destSR);
-
+            CoordinateTransformation ct2 = new CoordinateTransformation(destSR, srcSR);//从瓦片的坐标系转换到tif的坐标系
             double[] arrGeoTransform = new double[6];
             dsSrc.GetGeoTransform(arrGeoTransform);
-
-            //筛选和tif相交的部分
-            double[] subLT = {extent.getMinX(), extent.getMaxY()};
-            double[] subRB = {extent.getMaxX(), extent.getMinY()};
-            CoordinateTransformation ct2 = new CoordinateTransformation(destSR,srcSR);//从瓦片的坐标系转换到tif的坐标系
-            double[] subLT_trans = ct2.TransformPoint(subLT[0],subLT[1]);
-            double[] subRB_trans = ct2.TransformPoint(subRB[0],subRB[1]);
-            int[] subLT_ImageXY = RasterProcess.geo2ImageXY(subLT_trans[0],subLT_trans[1],arrGeoTransform);
-            int[] subRB_ImageXY = RasterProcess.geo2ImageXY(subRB_trans[0],subRB_trans[1],arrGeoTransform);
-
-            //判断是否越过原图像边界
-            int startRow = Math.max(0,subLT_ImageXY[1]);
-            int startCol = Math.max(0,subLT_ImageXY[0]);
-            int endRow = Math.min(uiRows,Math.abs(subRB_ImageXY[1])+1);
-            int endCol = Math.min(uiCols,Math.abs(subRB_ImageXY[0])+1);
-            //logger.info("====================start to insert tempArray====================");
-            for (int y = startRow; y < endRow; y++) {
-                for (int x = startCol; x < endCol; x++) {
-                    // tif
-                    //logger.info("==========start to transform==========");
-                    double[] doubles = RasterProcess.imageXY2Geo(x, y, arrGeoTransform);
-                    dMapX = doubles[0];
-                    dMapY = doubles[1];
-
-                    // 坐标转换 src->dest
-                    double[] xyTransformed = ct.TransformPoint(dMapX, dMapY);
-                    assert xyTransformed != null;
-                    dMapX = xyTransformed[0];
-                    dMapY = xyTransformed[1];
-
-                    // subfill
-                    double[] GT = {extent.getMinX(), dRes, 0.0, extent.getMaxY(), 0.0, -dRes};
-                    int[] ints = RasterProcess.geo2ImageXY(dMapX, dMapY, GT);
-                    iDestX = ints[0];
-                    iDestY = ints[1];
-                    //logger.info("===========start to read raster==========");
-                    if (!(iDestX < 0 || iDestX >= 256 //判断是否超出瓦片边界
-                            || iDestY < 0 || iDestY >= 256)) {
-                            // fill-in
-                        //logger.info(String.valueOf(imgArray[y*uiCols+x]));
-                            if (imgArray[y*uiCols+x] > 0) {
-                                tempImgArray[0][256 * iDestY + iDestX] = imgArray[y*uiCols+x];//将所有数值插入临时数组
-                            }
+            short[] imgArray = new short[1];
+            //最邻近重采样
+            for (int y = 0; y < ySize; y++) {
+                for (int x = 0; x < xSize; x++) {
+                    //计算png像素的地理坐标
+                    double[] pngGeoXY = RasterProcess.imageXY2Geo(x, y, GT);
+                    double[] tifGeoXY = ct2.TransformPoint(pngGeoXY[0], pngGeoXY[1]);//将坐标转换成tif坐标系下的坐标
+                    int[] tifImageXY = RasterProcess.geo2ImageXY(tifGeoXY[0], tifGeoXY[1], arrGeoTransform);//计算在tif上的像素坐标
+                    if (!(tifImageXY[0] < 0 || tifImageXY[0] > uiCols || tifImageXY[1] < 0 || tifImageXY[1] > uiRows)) {
+                        dsSrc.ReadRaster(tifImageXY[0], tifImageXY[1], 1, 1, 1, 1, gdalconst.GDT_UInt16, imgArray, new int[]{1});
+                        tempImgArray[0][y * 256 + x] = imgArray[0];
                     }
-                    //logger.info("===========read raster finished==========");
                 }
             }
-            logger.info("====================From "+tif+" into tempArray Finished====================");
-            dsSrc.delete();;
         }
         Driver memDriver = gdal.GetDriverByName("MEM");
         Dataset memDataset = memDriver.Create("", xSize, ySize, BAND_NUM, gdalconst.GDT_Byte);
@@ -298,10 +261,12 @@ public class SubImageV3 {
 
         }
         logger.info("Finished");
-        //dsDest.FlushCache();
-        //dsDest.delete();
+            //dsDest.FlushCache();
+            //dsDest.delete();
         return sub;
     }
+
+
 
 
 

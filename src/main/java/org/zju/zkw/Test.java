@@ -75,35 +75,8 @@ public class Test {
         gdal.AllRegister();
     }
     public static void main(String[] args) throws IOException, SQLException {
-        String tif = "D:\\ZJU_GIS\\testpic\\pic3\\2015\\GLCFCS30_E120N35.tif";
-        Dataset dsSrc = gdal.Open(tif,gdalconst.GF_Read);
+        String tif = "D:\\ZJU_GIS\\testpic\\pic2\\pic\\pic2.tif";
 
-        CoordinateTransformation ct = null;
-        int uiCols = dsSrc.GetRasterXSize();
-        int uiRows = dsSrc.GetRasterYSize();
-        int uiBands = dsSrc.GetRasterCount();
-        short[] imgArray = new short[uiCols*uiRows];
-        double dMapX, dMapY;  //
-        int iDestX, iDestY;
-        SpatialReference srcSR = dsSrc.GetSpatialRef();
-        SpatialReference destSR = new SpatialReference(PROJECT);//新投影为WEB墨卡托
-        ct = new CoordinateTransformation(srcSR, destSR);
-
-        double[] arrGeoTransform = new double[6];
-        dsSrc.GetGeoTransform(arrGeoTransform);
-        Date startdate = new Date();
-        System.out.println(startdate);
-        dsSrc.ReadRaster(0,0,uiCols,uiRows,uiCols,uiRows,gdalconst.GDT_UInt16,imgArray,new int[]{1});
-        for(int y=0;y<uiRows;y++){
-            for(int x=0;x<uiCols;x++){
-                if(imgArray[y*uiCols+x]>0) {
-                    System.out.print(x + " " + y);break;
-                }
-            }
-            System.out.println("");
-        }
-        Date enddate = new Date();
-        System.out.println(enddate);
     }
 
     private static String removeExtension(String fName) {
