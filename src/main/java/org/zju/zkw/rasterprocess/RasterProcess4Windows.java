@@ -6,11 +6,8 @@ import org.gdal.gdal.Dataset;
 import org.gdal.gdal.Driver;
 import org.gdal.gdal.gdal;
 import org.gdal.gdalconst.gdalconst;
-import org.gdal.ogr.Geometry;
-import org.gdal.ogr.ogr;
 import org.gdal.osr.CoordinateTransformation;
 import org.gdal.osr.SpatialReference;
-import org.zju.zkw.subimg.SubImageV2;
 import scala.Tuple2;
 
 import javax.validation.ValidationException;
@@ -19,7 +16,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.*;
-import java.util.stream.Stream;
 
 
 public class RasterProcess4Windows {

@@ -1,13 +1,4 @@
 package org.zju.zkw;
-import org.apache.commons.collections.IteratorUtils;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.PairFlatMapFunction;
-import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.*;
-import org.apache.spark.sql.Row;
-import org.gdal.gdal.Band;
 import org.gdal.gdal.Dataset;
 import org.gdal.gdal.Driver;
 import org.gdal.gdal.gdal;
@@ -16,21 +7,16 @@ import org.gdal.osr.CoordinateTransformation;
 import org.gdal.osr.SpatialReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.zju.zkw.DBConnection.JdbcUtil;
 import org.zju.zkw.information.Extent;
-import org.zju.zkw.information.RasterInfo;
 import org.zju.zkw.rasterprocess.RasterProcess;
-import org.zju.zkw.subimg.SubImage;
-import scala.Tuple2;
+
 import static org.zju.zkw.Constant.*;
-import javax.validation.constraints.NotNull;
-import javax.xml.crypto.Data;
+
 import java.io.*;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.*;
-import java.util.stream.Collectors;
-import org.sqlite.JDBC;
+
 //import com.github.jaiimageio.*;
 public class Test {
     private static final Logger logger = LoggerFactory.getLogger(Test.class);
@@ -75,8 +61,26 @@ public class Test {
         gdal.AllRegister();
     }
     public static void main(String[] args) throws IOException, SQLException {
-        String tif = "D:\\ZJU_GIS\\testpic\\pic2\\pic\\pic2.tif";
+        String sql = "SELECT * FROM tiles;";
+        Connection connection = JdbcUtil.getConnection();
+        PreparedStatement ps;
+        try{
+            ps=connection.prepareStatement(sql);
+            System.out.println("connection success");
+        }catch (SQLException e){
+            throw new RuntimeException(e);
+        }
 
+        ResultSet rs = ps.executeQuery();
+//        rs.next();
+//        Blob png = rs.getBlob("tile_data");
+//
+//        byte[] pngArray = png.getBytes(1,(int)png.length());
+//        Driver memDriver = gdal.GetDriverByName("MEM");
+//        Driver pngDriver = gdal.GetDriverByName("PNG");
+//        Dataset memDataset = memDriver.Create("",256,256,1,gdalconst.GDT_Byte);
+//        memDataset.WriteRaster(0,0,256,256,256,256,gdalconst.GDT_Byte,pngArray,new int[]{1});
+//        pngDriver.CreateCopy("C:\\Users\\Administrator\\Desktop\\4_12_10.png",memDataset);
     }
 
     private static String removeExtension(String fName) {

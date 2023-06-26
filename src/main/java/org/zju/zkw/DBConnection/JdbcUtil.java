@@ -17,7 +17,7 @@ public class JdbcUtil {
             //1.新建属性集对象
             Properties properties = new Properties();
             //2通过反射，新建字符输入流，读取db.properties文件
-            InputStream input = JdbcUtil.class.getClassLoader().getResourceAsStream("resources\\db.properties");
+            InputStream input = JdbcUtil.class.getClassLoader().getResourceAsStream("resources/db.properties");
             //3.将输入流中读取到的属性，加载到properties属性集对象中
             properties.load(input);
             //4.根据键，获取properties中对应的值

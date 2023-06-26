@@ -6,11 +6,8 @@ import org.gdal.gdal.Dataset;
 import org.gdal.gdal.Driver;
 import org.gdal.gdal.gdal;
 import org.gdal.gdalconst.gdalconst;
-import org.gdal.ogr.Geometry;
-import org.gdal.ogr.ogr;
 import org.gdal.osr.CoordinateTransformation;
 import org.gdal.osr.SpatialReference;
-import org.zju.zkw.subimg.SubImageV2;
 import scala.Tuple2;
 
 import javax.validation.ValidationException;
@@ -19,7 +16,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.*;
-import java.util.stream.Stream;
 
 
 public class RasterProcess {
@@ -185,18 +181,18 @@ public class RasterProcess {
                 GT2[3]=dMapY;
                 subInfo.getProjectInfo().setArrGeoTransform(GT2);
                 subInfo.setExtent(getExtent(subHeight,subWidth,GT2,null));
-                File file = new File(outFolder+"/"+String.format("%d/%d",zoomLevel,j));
-                //File file = new File(outFolder+"\\"+String.format("%d\\%d",zoomLevel,j));
-                if(!file.exists()){
-                    if(!file.mkdirs()){
-                        System.out.println("创建文件夹失败！");
-                    }
-                }
+                strImg = outFolder+"/"+String.format("%d/%d",zoomLevel,j)+"/"+String.format("%d.png",(int)(Math.pow(2,zoomLevel))-i);
+                // File file = new File(outFolder+"/"+String.format("%d/%d",zoomLevel,j));
+                //File = new File(outFolder+"\\"+String.format("%d\\%d",zoomLevel,j));
+//                if(!file.exists()){
+//                    if(!file.mkdirs()){
+//                        System.out.println("创建文件夹失败！");
+//                    }
+//                }
                 //strImg = file.getPath()+"/"+String.format("%d.tif",(int)(Math.pow(2,zoomLevel))-i);
-                strImg = file.getPath()+"/"+String.format("%d.png",(int)(Math.pow(2,zoomLevel))-i);
+                //strImg = file.getPath()+"/"+String.format("%d.png",(int)(Math.pow(2,zoomLevel))-i);
                 //strImg = file.getPath()+"\\"+String.format("%d.png",(int)(Math.pow(2,zoomLevel))-i);
-                //strImg = file.getPath()+"\\"+String.format("%d.tif",16-i);
-//                strImg = outFolder+"\\"+String.format("%d\\%d\\%d.TIF",zoomLevel,j,16-i);
+
                 subMaps.add(new Tuple2<>(strImg,subInfo.deepCopy()));
 
             }
@@ -204,6 +200,61 @@ public class RasterProcess {
     return subMaps;
     }
 
+    public static List<Tuple2<String,Extent>>createMapSubdivisionV2(Extent extent,int zoomLevel, int subWidth,int subHeight,
+                                                                      int bandNum,String destProj,String outFolder){
+        //获取新影像仿射系数及行列数
+        double dResolution = Constant.zResolution.get(zoomLevel);
+        double[] GT = {extent.getMinX(), dResolution, 0.0, extent.getMaxY(), 0.0, -dResolution};
+        double d1 = GT[1] * GT[5];
+        double d2 = GT[2] * GT[4];
+        int totalCols, totalRows;
+        totalCols = (int) ((GT[5] * extent.getMaxX() - GT[2] * extent.getMinY() -
+                GT[0] * GT[5] + GT[2] * GT[3]) / (d1 - d2)) + 1;
+        totalRows = (int) ((GT[4] * extent.getMaxX() - GT[1] * extent.getMinY() -
+                GT[0] * GT[4] + GT[1] * GT[3]) / (d2 - d1)) + 1;
+
+        //double[] GT = {extent.getMinX(),dResolution,0.0, extent.getMaxY(),0.0,-dResolution};//仿射系数
+        //计算分块数目
+        int subRows = (int)Math.ceil(totalRows*1.0/subHeight);
+        int subCols = (int)Math.ceil(totalCols*1.0/subWidth);
+
+        //写出空白影像信息（*不满要求的行/列宽按照原始图像输出）
+        RasterInfo subInfo = new RasterInfo()
+                .setProjectInfo(new ProjectInfo()
+                        .setProjWKT(destProj).setIGCPNum(0).setArrGeoTransform(GT.clone()))
+                .setBandNum(bandNum)
+                .setGdalType(gdalconst.GDT_Float32)
+                .setCols(subWidth)
+                .setRows(subHeight);
+        String strImg;
+        double dMapX,dMapY;
+
+        List<Tuple2<String,Extent>> subMaps = new ArrayList<>();
+        for(int i=0;i<subRows;i++){
+            for(int j=0;j<subCols;j++){
+                double[] maps = imageXY2Geo(j*subWidth,i*subHeight,GT);//找到每个像素点对应的地理坐标
+                dMapX = maps[0];
+                dMapY = maps[1];
+
+                //每个分幅变换
+                double[] GT2 = subInfo.getProjectInfo().getArrGeoTransform();
+                GT2[0]=dMapX;
+                GT2[3]=dMapY;
+                Extent e = getExtent(subHeight,subWidth,GT2,null);
+                File file = new File(outFolder+"/"+String.format("%d/%d",zoomLevel,j));
+                if(!file.exists()){
+                    if(!file.mkdirs()){
+                        System.out.println("创建文件夹失败！");
+                    }
+                }
+                //strImg = outFolder+"/"+String.format("%d/%d",zoomLevel,j)+"/"+String.format("%d.png",(int)(Math.pow(2,zoomLevel))-i);
+                strImg = outFolder+"\\"+String.format("%d\\%d",zoomLevel,j)+"\\"+String.format("%d.png",(int)(Math.pow(2,zoomLevel))-i);
+                subMaps.add(new Tuple2<>(strImg,e));
+
+            }
+        }
+        return subMaps;
+    }
     /***
      *
      * @param pngOut png图像输出路径
@@ -269,7 +320,30 @@ public class RasterProcess {
             }
         return byteArray;
     }
-
+    public static byte[] compress2(int[] tifArray,int row,int col,double perMin,double perMax){
+        short[] pngArray= new short[row*col];
+        byte[] Array = new byte[row*col];
+        //累计直方图统计
+        int[] temp= tifArray.clone();
+        int cutMax = percentile(temp,perMax);
+        int cutMin = percentile(temp,perMin);
+        int bandMin = temp[0];
+        int bandMax = temp[temp.length-1];
+        double compressScale = (double)(cutMax-cutMin)/255;
+        for(int i = 0;i<row;i++){
+            for(int j=0;j<col;j++){
+                if(tifArray[i*row+j]<cutMin){
+                    pngArray[i*row+j] = 0;continue;
+                }
+                if(tifArray[i*row+j]>cutMax){
+                    pngArray[i*row+j] = 255;continue;
+                }
+                pngArray[i*row+j] = (short)((tifArray[i*row+j]-cutMin)/compressScale);
+                Array[i*row+j] = (pngArray[i*row+j]>127)?(byte)(pngArray[i*row+j]-256):(byte)pngArray[i*row+j];
+            }
+        }
+        return Array;
+    }
     /***
      *  取百分位数
      * @param data 16位数据数组
